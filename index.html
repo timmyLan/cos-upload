@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>sliceUploadFile</title>
+    <style>
+        h1, h2 {
+            font-weight: normal;
+        }
+
+        #msg {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>sliceUploadFile</h1>
+
+<input id="submitBtn" type="submit">
+<h3>打开控制台监控文件上传进度及结果</h3>
+
+<script src="https://cdn.bootcss.com/axios/0.18.0/axios.js"></script>
+<script src="./cos-js-sdk-v5.min.js"></script>
+<script>
+    (function () {
+        var Bucket = 'task-1256472463';
+        var Region = 'ap-guangzhou';
+
+        var util = {
+            createFile: function (options) {
+                var buffer = new ArrayBuffer(options.size || 0);
+                var arr = new Uint8Array(buffer);
+                [].forEach.call(arr, function (char, i) {
+                    arr[i] = 0;
+                });
+                var opt = {};
+                options.type && (opt.type = options.type);
+                var blob = new Blob([buffer], options);
+                return blob;
+            }
+        };
+
+        //获取签名
+        var getAuthorization = function(){
+            return new Promise((resolve,reject)=>{
+                //服务器获取临时密钥请求地址
+                const url = 'http://127.0.0.1:3010/taskapi/v1/api/task/tx/config';
+                axios.get(url).then((res)=>{
+                    resolve(res.data);
+                }).catch((err)=>{
+                    reject(err);
+                });
+            })
+        }
+
+        // 监听表单提交
+        document.getElementById('submitBtn').onclick = function (e) {
+            const cos = new COS({
+                getAuthorization:function (options, callback) {
+                    getAuthorization().then((res)=>{
+                        const tempKeys = res.data['tempKeys'];
+                        callback({
+                            TmpSecretId: tempKeys.credentials && tempKeys.credentials.tmpSecretId,
+                            TmpSecretKey: tempKeys.credentials && tempKeys.credentials.tmpSecretKey,
+                            XCosSecurityToken: tempKeys.credentials && tempKeys.credentials.sessionToken,
+                            ExpiredTime: tempKeys.expiredTime,
+                        })
+                    })
+                }
+            })
+            /**
+             * 上传一个1kb的blob文件
+             */
+            const blob = util.createFile({size: 1024});
+            cos.sliceUploadFile({
+                Bucket,
+                Region,
+                Key: '1kb.zip', /* 必须 */
+                Body: blob,
+                TaskReady: function (tid) {
+                    TaskId = tid;
+                },
+                onHashProgress: function (progressData) {
+                },
+                onProgress: function (progressData) {
+                    console.log('onProgress', JSON.stringify(progressData));
+                },
+            }, function (err, data) {
+                console.log(err || data);
+            });
+        }
+    })();
+</script>
+
+</body>
+</html>
